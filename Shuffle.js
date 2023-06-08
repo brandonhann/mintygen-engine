@@ -4,7 +4,6 @@ function shuffle(array) {
     let currentIndex = array.length, randomIndex;
 
     while (currentIndex != 0) {
-
         randomIndex = Math.floor(Math.random() * currentIndex);
         currentIndex--;
 
@@ -38,8 +37,13 @@ function shuffle(array) {
         nft.id = int;
         nft.image = nft.image.replace(/\/(\d+)(.png|jpg|jpeg|gif)/g, `/${int}$2`);
 
-        const image = await fs.readFile(`./build/images/${currentId}.png`);
-        await fs.writeFile(`./build/images/${int}.png`, image);
+        // Rename original image to a temporary ID
+        await fs.rename(`./build/images/${currentId}.png`, `./build/images/${-index - 1}.png`);
+    }
+
+    // Rename the temp images to their shuffled IDs sequentially
+    for (const [index, int] of randomInts.entries()) {
+        await fs.rename(`./build/images/${-index - 1}.png`, `./build/images/${int}.png`);
     }
 
     await fs.writeFile("./build/metadata/_metadata.json", JSON.stringify(nfts, null, 2));
@@ -52,4 +56,3 @@ function shuffle(array) {
 
     await fs.writeFile(`./build/conversion_map.json`, JSON.stringify(conversionMap, null, 2));
 })();
-
