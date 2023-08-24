@@ -4,10 +4,9 @@ const { createCanvas, loadImage } = require("canvas");
 const isPkg = typeof process.pkg === "undefined";
 const parentFolder = isPkg ? process.cwd() : path.dirname(process.execPath);
 const buildFolder = `${parentFolder}/build`;
-var layerDir = `${parentFolder}/layers/C`;
 const colors = require("colors");
 
-const engine_version = 1.1;
+const engine_version = 1.2;
 const compatible_compiler_version = 1.0;
 
 let config;
@@ -20,20 +19,12 @@ try {
 const requiredKeys = [
   "quantity",
   "width",
-  "r_percent",
-  "c_percent",
-  "superrare",
-  "u_percent",
   "network",
   "title",
   "baseUri",
-  "uncommon",
   "desc",
-  "s_percent",
-  "rare",
   "compiler_version",
   "height",
-  "common",
   "layers",
   "starting_count",
 ];
@@ -103,32 +94,55 @@ if (network == "Ethereum") {
 var specArray = [];
 var metadataArray = [];
 var attributesArray = [];
-const rarityType = [common, uncommon, rare, superrare];
-var rarityDistribution = [c_percent, u_percent, r_percent, s_percent];
+let rarityTypes = {};
+let rarityPercents = {};
+config.forEach(item => {
+  if (item.key.endsWith('_percent')) {
+    let rarityIndex = item.key.split('_')[0];
+    rarityPercents[rarityIndex] = parseInt(item.value);
+  } else if (!isNaN(item.key)) {
+    rarityTypes[item.key] = item.value;
+  } else {
+    global[item.key] = item.value;
+  }
+});
 const rarityCounts = {};
 
 let rememberedQuantity;
 
 function CalculateRarity() {
-  rarityDistribution = rarityDistribution.map((val) => parseInt(val, 10));
+  let totalPercent = 0;
+  for (let rarity in rarityPercents) {
+    totalPercent += rarityPercents[rarity];
+  }
 
-  if (rarityDistribution.reduce((acc, val) => acc + val, 0) !== 100) {
+  if (totalPercent !== 100) {
     throw new Error(
       colors.red(
         "Error: Rarity distribution cannot add up to more or less than 100%"
       )
     );
   }
-  for (let i = 0; i < rarityType.length; i++) {
-    let count = Math.floor((rarityDistribution[i] * quantity) / 100);
-    rarityCounts[rarityType[i]] = count;
+
+  for (let rarity in rarityPercents) {
+    let count = Math.floor((rarityPercents[rarity] * quantity) / 100);
+    rarityCounts[rarityTypes[rarity]] = count;
   }
+
   let remainder =
     quantity - Object.values(rarityCounts).reduce((acc, val) => acc + val, 0);
-  rarityCounts[rarityType[rarityType.length - 1]] += remainder;
+
+  let sortedRarities = Object.keys(rarityTypes).sort();
+  let i = 0;
+  while (remainder > 0) {
+    rarityCounts[rarityTypes[sortedRarities[i % sortedRarities.length]]]++;
+    remainder--;
+    i++;
+  }
+
   console.log(rarityCounts);
-  rememberedQuantity = rarityCounts.Common;
-};
+  rememberedQuantity = rarityCounts[Object.keys(rarityCounts)[0]];
+}
 
 const format = {
   width,
@@ -156,7 +170,7 @@ function InitDirs() {
   }
 }
 
-function InitLayers(layers) {
+function InitLayers(layers, layerDir) {
   const layersArray = JSON.parse(layers);
 
   function processLayer(layerObj, index) {
@@ -239,8 +253,18 @@ function AppendMetadata(_spec, _quantity) {
 }
 
 function AppendAttributes(_attribute) {
-  const { selectedAttribute } = _attribute.layer;
-  const { name } = _attribute.layer;
+  if (!_attribute) {
+    console.error("Error: _attribute is undefined.");
+    return;
+  }
+
+  const { name, selectedAttribute } = _attribute;
+
+  if (!selectedAttribute) {
+    console.error("Error: selectedAttribute is undefined.");
+    console.error("_attribute:", _attribute);
+    return;
+  }
 
   attributesArray = [
     ...attributesArray,
@@ -250,6 +274,7 @@ function AppendAttributes(_attribute) {
     },
   ];
 }
+
 
 async function SaveImage(_attributeCount) {
   return Promise.all(promiseArray)
@@ -286,65 +311,52 @@ function SpecifyLayers(_spec = [], _layers = []) {
       name: layer.name,
       selectedAttribute: selectedAttribute,
     };
-  };
+  }
 
   const mappedSpecToLayers = _layers.map(processLayer);
   return mappedSpecToLayers;
-};
+}
 
 let quantityCount = starting_count;
 let promiseArray = [];
 
-async function Generate(_stage) {
-  if (_stage == 2) {
-    rememberedQuantity = rememberedQuantity + rarityCounts.Uncommon;
-  } else if (_stage == 3) {
-    rememberedQuantity = rememberedQuantity + rarityCounts.Rare;
-  } else if (_stage == 4) {
-    rememberedQuantity = rememberedQuantity + rarityCounts.SuperRare;
-  }
+async function Generate(_stage, layerDir) {
+  let rarityTypeKeys = Object.keys(rarityTypes).sort();
+  rememberedQuantity = quantityCount + rarityCounts[rarityTypes[rarityTypeKeys[_stage - 1]]];
 
   let failedCount = 0;
-  const buildLayers = InitLayers(layers);
-  while (quantityCount <= rememberedQuantity) {
+  const buildLayers = InitLayers(layers, layerDir);
+
+  while (quantityCount < rememberedQuantity && quantityCount < quantity) {
     let newSpec = buildLayers.map(layer => Math.floor(Math.random() * layer.attributes.length));
     let existingSpecIndex = specArray.findIndex(existingSpec => existingSpec.join("") === newSpec.join(""));
     if (existingSpecIndex === -1) {
       let results = SpecifyLayers(newSpec, buildLayers);
-      let loadedAttributes = [];
 
-      results.forEach((layer) => {
-        const loadImagePath = `${layer.selectedAttribute.path}`;
-        const loadedImage = loadImage(loadImagePath);
-        loadedAttributes.push({
-          layer: layer,
-          loadedImage: loadedImage,
+      let imageLoadPromises = results.map(layer => loadImage(`${layer.selectedAttribute.path}`));
+      try {
+        const loadedImages = await Promise.all(imageLoadPromises);
+        ctx.clearRect(0, 0, format.width, format.height);
+
+        loadedImages.forEach(image => {
+          ctx.drawImage(image, 0, 0, format.width, format.height);
         });
-      });
 
-      let attributeArray = [];
+        results.forEach(layer => {
+          if (layer.selectedAttribute) {
+            AppendAttributes(layer);
+          }
+        });
 
-      loadedAttributes.forEach((e) => {
-        attributeArray.push(e);
-      });
-      ctx.clearRect(0, 0, format.width, format.height);
-
-      attributeArray.forEach((attribute) => {
-        const handleLoadedImage = (e) => {
-          promiseArray.push(e);
-          ctx.drawImage(e, 0, 0, format.width, format.height);
-        };
-
-        attribute.loadedImage.then(handleLoadedImage);
-        AppendAttributes(attribute);
-      });
-
-      SaveImage(quantityCount);
-      AppendMetadata(newSpec, quantityCount);
-      SaveMetadata(JSON.stringify((quantityCount, null, 2)), true);
-      console.log(`id: ${quantityCount}, specification: ${newSpec.join('')}`);
-      specArray.push(newSpec);
-      quantityCount++;
+        SaveImage(quantityCount);
+        AppendMetadata(newSpec, quantityCount);
+        SaveMetadata(JSON.stringify((quantityCount, null, 2)), true);
+        console.log(`id: ${quantityCount}, specification: ${newSpec.join('')}`);
+        specArray.push(newSpec);
+        quantityCount++;
+      } catch (err) {
+        console.error(`Error loading images: ${err.message}`);
+      }
     } else {
       console.log(
         colors.yellow(`id: ${quantityCount}, Spec ${specArray[existingSpecIndex].join('')} already exists. Attempting new spec...`)
@@ -357,29 +369,15 @@ async function Generate(_stage) {
     }
   }
   SaveMetadata(JSON.stringify(metadataArray, null, 2));
-};
+}
+
 
 async function Staging() {
-  for (let i = 1; i <= 4; i++) {
-    if (i === 1) {
-      layerDir = `${parentFolder}/layers/C`;
-      stage = 1;
-      Generate(stage);
-    } else if (i === 2) {
-      layerDir = `${parentFolder}/layers/U`;
-      stage = 2;
-      Generate(stage);
-    } else if (i === 3) {
-      layerDir = `${parentFolder}/layers/R`;
-      stage = 3;
-      Generate(stage);
-    } else if (i === 4) {
-      layerDir = `${parentFolder}/layers/SR`;
-      stage = 4;
-      Generate(stage);
-    }
+  let sortedRarities = Object.keys(rarityTypes).sort();
+  for (let i = 0; i < sortedRarities.length; i++) {
+    let layerDir = `${parentFolder}/layers/${sortedRarities[i]}`;
+    await Generate(i + 1, layerDir);
   }
-
   await Promise.all(promiseArray);
   console.log(colors.green("Success! Your collection has been generated."));
 }
