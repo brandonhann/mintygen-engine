@@ -46,12 +46,12 @@ To use the Update option, simply run `node Update.js` and follow the prompts.
 
 ## Setting up Layers
 
-Before generating NFTs, you must set up the layers under the `./layers` folder. There are four types of layers:
+Before generating NFTs, you must set up the layers under the `./layers` folder. There's an unlimited amount of layers permitted however you must name the subfolder with the an incremented number:
 
-- `./layers/C` (common)
-- `./layers/U` (uncommon)
-- `./layers/R` (rare)
-- `./layers/SR` (super rare)
+- `./layers/1` (common)
+- `./layers/2` (uncommon)
+- `./layers/3` (rare)
+- `./layers/4` (super rare)
 
 Under each of these directories, you can create subfolders and place the `.png` files for the layers/attributes. The NFT generator engine will use these layers to determine which of each rarity will receive which attribute.
 
