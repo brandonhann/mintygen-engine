@@ -233,7 +233,7 @@ function AppendMetadata(_spec, _quantity) {
   };
 
   if (network === "Solana") {
-    metadata.creators = creators;
+    metadata.creators = (typeof creators === "string") ? JSON.parse(creators) : creators;
     metadata.seller_fee_basis_points = parseInt(seller_fee_basis_points);
     metadata.symbol = symbol;
     metadata.external_url = external_url;
