@@ -6,7 +6,7 @@ const parentFolder = isPkg ? process.cwd() : path.dirname(process.execPath);
 const buildFolder = `${parentFolder}/build`;
 const colors = require("colors");
 
-const engine_version = 1.2;
+const engine_version = 1.3;
 const compatible_compiler_version = 1.0;
 
 let config;
@@ -34,6 +34,7 @@ const solKeys = {
   creators: [],
   symbol: "",
   seller_fee_basis_points: parseInt("0"),
+  collection: [],
 };
 
 
@@ -69,6 +70,11 @@ if (network === "Solana") {
 
   if (keys.includes("creators")) {
     global["creators"] = JSON.parse(creators);
+  }
+
+  if (keys.includes("collection")) {
+    const collectionArray = JSON.parse(collection);
+    global["collection"] = collectionArray.length > 0 ? collectionArray[0] : {};
   }
 }
 
@@ -234,6 +240,7 @@ function AppendMetadata(_spec, _quantity) {
 
   if (network === "Solana") {
     metadata.creators = (typeof creators === "string") ? JSON.parse(creators) : creators;
+    metadata.collection = (typeof collection === "string") ? JSON.parse(collection)[0] : collection.length > 0 ? collection[0] : {};
     metadata.seller_fee_basis_points = parseInt(seller_fee_basis_points);
     metadata.symbol = symbol;
     metadata.external_url = external_url;
